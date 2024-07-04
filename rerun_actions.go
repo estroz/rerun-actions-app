@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/google/go-github/v33/github"
@@ -225,17 +226,16 @@ func isCommenterPrivileged(authorAssoc string) bool {
 func parseCommentsToWorkflowNames(commentBody string) map[string]struct{} {
 	testsToRerun := make(map[string]struct{})
 	scanner := bufio.NewScanner(strings.NewReader(commentBody))
+	re := regexp.MustCompile(`"[^"]+"|\S+`)
+
 	for scanner.Scan() {
-		var splitComment []string
-		for _, word := range strings.Split(scanner.Text(), " ") {
-			if word = strings.TrimSpace(word); word != "" {
-				splitComment = append(splitComment, word)
-			}
-		}
+		splitComment := re.FindAllString(scanner.Text(), -1)
+
 		// Ignore non-command comments or comments smaller than any command size.
 		if len(splitComment) == 0 || len(splitComment[0]) < 5 || splitComment[0][0] != '/' {
-			return nil
+			continue
 		}
+
 		switch splitComment[0][1:] {
 		case retestAllWorkflowsCommand:
 			testsToRerun[testAll] = struct{}{}
@@ -243,7 +243,8 @@ func parseCommentsToWorkflowNames(commentBody string) map[string]struct{} {
 			if len(splitComment) < 2 {
 				continue
 			}
-			testsToRerun[splitComment[1]] = struct{}{}
+			workflowName := strings.Trim(splitComment[1], "\"")
+			testsToRerun[workflowName] = struct{}{}
 		}
 	}
 	return testsToRerun
